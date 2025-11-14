@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>مدیریت هزینه‌های روزانه</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-6">
+    <header class="mb-6 flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800 mb-1">هزینه‌های روزانه</h1>
+        <p class="text-slate-500 text-sm">هزینه‌های هر روزت رو وارد کن و جمع کل رو ببین.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="dateFilter" class="text-sm text-slate-600">تاریخ:</label>
+        <input id="dateFilter" type="date" class="border border-slate-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+    </header>
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+      <h2 class="font-semibold text-slate-800 mb-3 text-sm">افزودن هزینه جدید</h2>
+      <form id="expenseForm" class="grid gap-3 md:grid-cols-6 items-end">
+        <div class="md:col-span-2">
+          <label class="block text-xs text-slate-600 mb-1" for="amount">مبلغ (تومان)</label>
+          <input id="amount" type="number" min="0" step="100" required class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="مثلاً ۵۰٬۰۰۰">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs text-slate-600 mb-1" for="category">دسته‌بندی</label>
+          <select id="category" class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="غذا">غذا</option>
+            <option value="حمل و نقل">حمل و نقل</option>
+            <option value="تفریح">تفریح</option>
+            <option value="خرید روزانه">خرید روزانه</option>
+            <option value="قبض و اشتراک">قبض و اشتراک</option>
+            <option value="سایر">سایر</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs text-slate-600 mb-1" for="note">توضیحات (اختیاری)</label>
+          <input id="note" type="text" class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="مثلاً ناهار با دوستان">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs text-slate-600 mb-1" for="dateInput">تاریخ هزینه</label>
+          <input id="dateInput" type="date" class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="md:col-span-1">
+          <button type="submit" class="w-full bg-blue-600 text-white text-sm font-medium rounded-md py-2 hover:bg-blue-700 transition-colors">افزودن</button>
+        </div>
+      </form>
+    </section>
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold text-slate-800 text-sm">لیست هزینه‌ها</h2>
+        <div class="text-sm text-slate-700">
+          جمع امروز: <span id="todayTotal" class="font-bold text-blue-600">۰</span> تومان
+        </div>
+      </div>
+      <div id="emptyState" class="bg-white border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 text-sm">
+        هنوز هزینه‌ای برای این تاریخ ثبت نکرده‌ای.
+      </div>
+      <div id="expenseList" class="space-y-2 hidden"></div>
+    </section>
+  </div>
+  <script>
+    const expenseForm = document.getElementById("expenseForm");
+    const amountInput = document.getElementById("amount");
+    const categoryInput = document.getElementById("category");
+    const noteInput = document.getElementById("note");
+    const dateInput = document.getElementById("dateInput");
+    const dateFilter = document.getElementById("dateFilter");
+    const expenseList = document.getElementById("expenseList");
+    const emptyState = document.getElementById("emptyState");
+    const todayTotalEl = document.getElementById("todayTotal");
+    function toPersianDigits(num) {
+      return num.toString().replace(/[0-9]/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);
+    }
+    function formatAmount(value) {
+      return toPersianDigits(Number(value).toLocaleString("fa-IR"));
+    }
+    function getTodayISO() {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+    function loadExpenses() {
+      const raw = localStorage.getItem("daily-expenses");
+      if (!raw) return [];
+      try {
+        return JSON.parse(raw) || [];
+      } catch {
+        return [];
+      }
+    }
+    function saveExpenses(list) {
+      localStorage.setItem("daily-expenses", JSON.stringify(list));
+    }
+    function renderExpenses() {
+      const all = loadExpenses();
+      const selectedDate = dateFilter.value || getTodayISO();
+      const items = all.filter(e => e.date === selectedDate);
+      expenseList.innerHTML = "";
+      if (!items.length) {
+        emptyState.classList.remove("hidden");
+        expenseList.classList.add("hidden");
+        todayTotalEl.textContent = "۰";
+        return;
+      }
+      emptyState.classList.add("hidden");
+      expenseList.classList.remove("hidden");
+      let total = 0;
+      items.forEach(item => {
+        total += item.amount;
+        const row = document.createElement("div");
+        row.className = "bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-sm";
+        const main = document.createElement("div");
+        main.className = "flex-1";
+        const line1 = document.createElement("div");
+        line1.className = "flex items-center justify-between gap-2 mb-0.5";
+        const left = document.createElement("div");
+        left.className = "font-medium text-slate-800";
+        left.textContent = item.category;
+        const right = document.createElement("div");
+        right.className = "font-bold text-emerald-600";
+        right.textContent = formatAmount(item.amount) + " تومان";
+        line1.appendChild(left);
+        line1.appendChild(right);
+        const line2 = document.createElement("div");
+        line2.className = "text-xs text-slate-500 flex items-center justify-between gap-2";
+        const noteSpan = document.createElement("span");
+        noteSpan.textContent = item.note || "بدون توضیح";
+        const timeSpan = document.createElement("span");
+        timeSpan.textContent = item.time || "";
+        line2.appendChild(noteSpan);
+        line2.appendChild(timeSpan);
+        main.appendChild(line1);
+        main.appendChild(line2);
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "text-xs text-red-600 hover:text-red-700 px-2 py-1 rounded-md hover:bg-red-50";
+        deleteBtn.textContent = "حذف";
+        deleteBtn.addEventListener("click", () => {
+          const updated = loadExpenses().filter(e => e.id !== item.id);
+          saveExpenses(updated);
+          renderExpenses();
+        });
+        row.appendChild(main);
+        row.appendChild(deleteBtn);
+        expenseList.appendChild(row);
+      });
+      todayTotalEl.textContent = formatAmount(total);
+    }
+    expenseForm.addEventListener("submit", e => {
+      e.preventDefault();
+      const amount = Number(amountInput.value || 0);
+      if (!amount || amount <= 0) {
+        alert("مبلغ معتبر وارد کن.");
+        return;
+      }
+      const all = loadExpenses();
+      const now = new Date();
+      const date = dateInput.value || getTodayISO();
+      const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const expense = {
+        id: Date.now() + Math.random().toString(16).slice(2),
+        amount,
+        category: categoryInput.value || "سایر",
+        note: noteInput.value.trim(),
+        date,
+        time
+      };
+      all.push(expense);
+      saveExpenses(all);
+      amountInput.value = "";
+      noteInput.value = "";
+      if (!dateInput.value) {
+        dateInput.value = "";
+      }
+      if (!dateFilter.value) {
+        dateFilter.value = date;
+      }
+      renderExpenses();
+    });
+    function initDates() {
+      const today = getTodayISO();
+      if (!dateFilter.value) dateFilter.value = today;
+      if (!dateInput.value) dateInput.value = today;
+    }
+    dateFilter.addEventListener("change", renderExpenses);
+    initDates();
+    renderExpenses();
+  </script>
+</body>
+</html>
